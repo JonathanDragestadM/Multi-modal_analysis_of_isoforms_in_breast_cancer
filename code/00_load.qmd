@@ -1,0 +1,96 @@
+---
+title: "00_load"
+format: html
+editor: visual
+---
+
+## Download
+
+#### download
+
+```{r}
+command_move <- "cd /home/projects/kvs_students/jm_paired_prot_iso/Multi-modal_analysis_of_isoforms_in_breast_cancer/data/Raw"
+command_download <- "bash 00_download_aidscript_from_github.sh -f PDC_file_manifest_*.csv "
+
+# system(paste(command_move,command_download,sep = " && "))
+```
+
+#### concatenate
+
+```{r,message=FALSE}
+
+library(tidyverse)
+library(fs)
+
+```
+
+collect all data files into one
+
+```{r}
+
+command_move <- "cd /home/projects/kvs_students/jm_paired_prot_iso/Multi-modal_analysis_of_isoforms_in_breast_cancer/data/Raw/PDC000173/1/'Peptide\ Spectral\ Matches'"
+command_header_collect <- "head -n 1 $(find ./*/*/* -print -quit > ./../../../collect.raw.cap.psm)"
+command_content_collect <- "tail -n +2 -q ./*/*/* >> ./../../../collect.raw.cap.psm"
+
+system(paste(command_move,
+             command_header_collect,
+             command_content_collect,
+             sep = " && "))
+
+
+```
+
+#### Extract
+
+```{r}
+
+command_move <- "cd /home/projects/kvs_students/jm_paired_prot_iso/Multi-modal_analysis_of_isoforms_in_breast_cancer/data/Raw"
+
+command_extract <- "cat collect.raw.cap.psm | cut -f 1,11,23-26 -d '\t' > extrac_collect.raw.cap.psm"
+
+system(paste(command_move,
+             command_extract, 
+             sep = " && "))
+```
+
+#### Compress
+
+```{r}
+
+
+command_move <- "cd /home/projects/kvs_students/jm_paired_prot_iso/Multi-modal_analysis_of_isoforms_in_breast_cancer/data/Raw"
+
+command_compress_collect <- "gzip collect.raw.cap.psm"
+command_compress_extract <- "gzip extrac_collect.raw.cap.psm"
+
+system(paste(command_move,
+             command_compress_collect,
+             command_compress_extract,
+             sep = " && "))
+
+```
+
+```{r}
+#all
+data_dir <- "../data/Raw/PDC000173/1/Peptide Spectral Matches/"
+# test single sample
+# data_dir <- "../data/Raw/PDC000173/1/Peptide Spectral Matches/01TCGA_AO-A12D-01A_C8-A131-01A_AO-A12B-01A_Proteome_BI_20130208/Text/" 
+
+# get file names
+filenames <- dir_ls(
+  path = data_dir,
+  glob  = "*/Text/*",
+  recurse = TRUE)
+
+# load all into one
+combine_data <- map_dfr(
+  .x = filenames,
+  .f = read_tsv)
+
+# save all
+
+write_csv(x = combine_data,
+          file = "../data/00_load.gz" )
+
+
+```

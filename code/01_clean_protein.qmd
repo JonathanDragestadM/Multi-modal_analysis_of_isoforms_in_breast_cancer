@@ -1,0 +1,194 @@
+---
+title: "01_clean_protein"
+format: html
+editor: visual
+---
+
+## Clean proteomics data
+
+The protein files contains alot of information, some are relefant for the project and some are not. The colums of interest for this project are the intenisty/qulity columns, peptide seqment and identifier
+
+#### Libraies
+
+```{r,message=FALSE}
+library(readr)
+library(tidyverse)
+library(ggplot2)
+```
+
+#### data Load
+
+```{r, message=FALSE,warning=FALSE}
+
+# Find name of all files
+temp = list.files(path = "data/Raw/PDC000173/1/Peptide Spectral Matches/01TCGA_AO-A12D-01A_C8-A131-01A_AO-A12B-01A_Proteome_BI_20130208/Text/",
+                  pattern = "*.raw.cap.psm",
+                  full.names = TRUE)
+# Read all the files
+myfiles = lapply(temp, read_tsv)
+
+protein_file <- do.call(rbind, myfiles)
+
+# protein_file <- read_tsv("data/Raw/PDC000173/1/Peptide Spectral Matches/01TCGA_AO-A12D-01A_C8-A131-01A_AO-A12B-01A_Proteome_BI_20130208/Text/TCGA_AO-A12D_C8-A131_AO-A12B_117C_W_BI_20130208_H-PM_f01.raw.cap.psm")
+
+```
+
+#### Extract colum of interest and clean
+
+extraction
+
+```{r}
+protein_subcolum <-protein_file |> 
+  select(FileName,PeptideSequence,iTRAQ114,iTRAQ115,iTRAQ116,iTRAQ117)
+```
+
+Split intensity and quality score in iTRAQ clums
+
+```{r}
+# funtion to split a single iTTRQ colum by name in df into inten and quality
+sep_iTRAQ <- function(df,col_to_sep){
+  intense_name <- paste(col_to_sep,"_inten")
+  quail_name <- paste(col_to_sep,"_qual_score")
+  
+  df |> 
+  separate(col = col_to_sep,
+           into = c(intense_name,quail_name),
+           sep = "/") |> 
+    mutate(
+      !!as.name(quail_name) := str_replace(
+        !!as.name(quail_name),
+        "[?]", "0")) |> 
+    mutate(
+      !!as.name(quail_name) := as.numeric(!!as.name(quail_name))) |> 
+    mutate(
+      !!as.name(intense_name) := as.numeric(!!as.name(intense_name)))
+    }
+ 
+# funtion to split all iTRAQ in df given the names are iTRAQ114:117
+tibble_iTRAQ_all_spliter <- function(df){
+  df |> 
+  sep_iTRAQ("iTRAQ114") |> 
+  sep_iTRAQ("iTRAQ115") |> 
+  sep_iTRAQ("iTRAQ116") |> 
+  sep_iTRAQ("iTRAQ117") 
+
+}
+
+protein_iTRAQ_clean <- protein_subcolum |> 
+  tibble_iTRAQ_all_spliter() 
+
+# Checking if any column contrain still "/"
+protein_iTRAQ_clean |> 
+  select(-c(FileName,PeptideSequence)) |>
+  mutate(across(everything(), ~str_detect(., "/"))) |> 
+  group_by_all() |> 
+  count() |> 
+  ungroup() |> 
+  select(contains("TRUE"))
+    
+
+
+```
+
+Clean peptideseq to onlycontain AA
+
+```{r}
+# Clean 
+pep_seq_rm_number <- function(df){
+df  |> 
+  mutate(PeptideSequence = str_remove_all(PeptideSequence,"[^ACDEFGHIKLMNPQRSTVWY]"))
+}
+
+protein_all_clean <- protein_iTRAQ_clean |> 
+  pep_seq_rm_number() 
+
+
+```
+
+#### Count peptides
+
+```{r}
+
+pep_counter <- function(df){
+   itray_names <- c("iTRAQ114","iTRAQ115","iTRAQ116","iTRAQ117") 
+   itray_col_names <- itray_names |> 
+     paste0("_pep_present")
+   
+  df |>
+    group_by(PeptideSequence) |> 
+    summarize(
+       !!as.name(itray_col_names[1]) := sum(
+        !! as.name(paste0(itray_names[1]," _inten")) > 1 &
+          !! as.name(paste0(itray_names[1]," _qual_score")) > 0.1),
+       !!as.name(itray_col_names[2]) := sum(
+        paste0(itray_names[2]," _inten") > 1 &
+          paste0(itray_names[2]," _qual_score") > 0.1),
+      !!as.name(itray_col_names[3]) := sum(
+        paste0(itray_names[3]," _inten") > 1 &
+          paste0(itray_names[3]," _qual_score") > 0.1),
+      !!as.name(itray_col_names[4]) := sum(
+        paste0(itray_names[4]," _inten") > 1 &
+          paste0(itray_names[4]," _qual_score") > 0.1))
+  }
+
+
+protein_count <- protein_all_clean |>
+  pep_counter()
+
+
+
+
+```
+
+```{r}
+protein_all_clean |> 
+  ggplot(
+    aes(
+      x = as.numeric(`iTRAQ114 _qual_score`))) +
+  geom_histogram(fill="white")
+
+
+protein_all_clean |> 
+  ggplot(
+    aes(
+      x = as.numeric(`iTRAQ114 _inten`))) +
+  geom_histogram(fill="white")
+
+
+fisk <- protein_all_clean|> 
+  select(`iTRAQ114 _qual_score`) 
+fisk[1:10,] |> 
+  pull() |> 
+  as.numeric()
+
+fisk <- fisk |> 
+  mutate(`iTRAQ114 _qual_score` = as.numeric(`iTRAQ114 _qual_score`))
+
+
+fisk |> 
+    ggplot(
+    aes(
+      x = `iTRAQ114 _qual_score`)) +
+  geom_density(color = "blue") +
+  xlim(-0.5,0.5)
+
+
+
+
+
+fisk2 <- protein_all_clean|> 
+  select(`iTRAQ114 _inten`) 
+
+fisk2 <- fisk2 |> 
+  mutate(`iTRAQ114 _inten` = as.numeric(`iTRAQ114 _inten`))
+
+
+fisk2 |> 
+    ggplot(
+    aes(
+      x = `iTRAQ114 _inten`)) +
+  geom_density(color = "blue") +
+  scale_x_log10()
+```
+
+use purr

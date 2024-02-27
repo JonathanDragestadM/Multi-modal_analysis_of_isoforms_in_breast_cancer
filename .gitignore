@@ -1,0 +1,15 @@
+.Rproj.user
+
+.Rhistory
+
+.RData
+
+.Ruserdata
+
+Multi-modal_analysis_of_isoforms_in_breast_cancer.Rproj
+
+
+data/*_*
+data/Raw/PDC000173/
+
+data/
